@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 
+// Shadcn UI components
+// Assuming these paths are correct relative to your project structure
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,8 +22,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 
+// Declare google globally for TypeScript if loading via script tag
 declare let google: any;
 
+// Zod schema for CreateOrderDto
 const createOrderSchema = z.object({
   first_name: z.string().min(1, "First name is required."),
   last_name: z.string().min(1, "Last name is required."),
@@ -69,11 +73,14 @@ const createOrderSchema = z.object({
 
 type CreateOrderDtoType = z.infer<typeof createOrderSchema>;
 
+const googleMapsApiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
 const EasyDropCheckout = () => {
-  const mapRef = useRef(null); // Ref for the map container
-  const mapInstance = useRef<any>(null); // Ref for the Google Maps map instance
-  const markerInstance = useRef<any>(null); // Ref for the Google Maps marker instance
-  const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false); // State to track Google Maps loading
+  const mapRef = useRef(null); // Ref for the map container DOM element
+  const mapInstance = useRef<google.maps.Map | null>(null); // Ref for the Google Maps map instance
+  const markerInstance = useRef<google.maps.Marker | null>(null); // Ref for the Google Maps marker instance
+  const [isGoogleMapsLoaded, setIsGoogleMapsLoaded] = useState(false); // State to track Google Maps script loading
+  const [searchAddress, setSearchAddress] = useState<string>(""); // State for address search input
 
   const form = useForm<CreateOrderDtoType>({
     resolver: zodResolver(createOrderSchema),
@@ -83,7 +90,7 @@ const EasyDropCheckout = () => {
       phone_number: "+251900000000",
       email: "default@ed.com",
       location: {
-        address: "Bole Int'l Airport",
+        address: "Bole Int'l Airport, Addis Ababa, Ethiopia",
         latitude: 8.9806, // Default to Addis Ababa for Google Maps
         longitude: 38.7578, // Default to Addis Ababa for Google Maps
         postal_code: "1000",
@@ -100,19 +107,19 @@ const EasyDropCheckout = () => {
     },
   });
 
-  const googleMapsApiKey = "AIzaSyAECfKOCohWMkjrn8BsOLbf387EZnjrNaE";
-  // Dynamic Google Maps loading
+  // Dynamic Google Maps loading using a script tag
   useEffect(() => {
     let googleMapsScript: HTMLScriptElement | null = null;
 
     const loadGoogleMaps = () => {
       // Create and append Google Maps JavaScript script
       googleMapsScript = document.createElement("script");
-      googleMapsScript.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&callback=initMap`;
+      googleMapsScript.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsApiKey}&libraries=places&callback=initMap`; // Added places library
       googleMapsScript.async = true;
       googleMapsScript.defer = true;
 
       // Define a global callback function for Google Maps API to call once loaded
+      // This function sets the isGoogleMapsLoaded state to true
       window.initMap = () => {
         setIsGoogleMapsLoaded(true);
       };
@@ -120,33 +127,37 @@ const EasyDropCheckout = () => {
       document.body.appendChild(googleMapsScript);
     };
 
-    // Only load Google Maps if it's not already defined globally
+    // Only load Google Maps if it's not already defined globally or loading
     if (typeof google === "undefined" || typeof google.maps === "undefined") {
       loadGoogleMaps();
     } else {
-      setIsGoogleMapsLoaded(true); // If Google Maps is already defined, set state to true immediately
+      // If Google Maps is already defined (e.g., from a previous component instance), set state immediately
+      setIsGoogleMapsLoaded(true);
     }
 
-    // Cleanup function for dynamically added elements and map instance
+    // Cleanup function for dynamically added elements and global callback
     return () => {
       if (googleMapsScript && document.body.contains(googleMapsScript)) {
         document.body.removeChild(googleMapsScript);
       }
-      // Clean up the global callback to avoid memory leaks
+      // Clean up the global callback to avoid potential conflicts
       if (typeof window.initMap === "function") {
         delete window.initMap;
       }
+      // Although Google Maps API doesn't have a direct 'remove' for the map object,
+      // setting it to null allows for garbage collection and prevents issues on re-mount.
       if (mapInstance.current) {
-        // Google Maps instances don't have a direct 'remove' method like Leaflet,
-        // but setting it to null and allowing garbage collection is usually sufficient.
         mapInstance.current = null;
       }
     };
-  }, []); // Rerun if API key changes
+  }, []); // Rerun if API key changes (should be stable)
+
+  // Geocoder instance
+  const geocoder = useRef<google.maps.Geocoder | null>(null);
 
   // Initialize and manage the Google Map ONLY when Google Maps is loaded
   useEffect(() => {
-    // Check if Google Maps is loaded, map container ref is available, and map hasn't been initialized yet
+    // Ensure Google Maps API is loaded, mapRef is available, and map hasn't been initialized yet
     if (
       isGoogleMapsLoaded &&
       mapRef.current &&
@@ -154,54 +165,202 @@ const EasyDropCheckout = () => {
       typeof google !== "undefined" &&
       typeof google.maps !== "undefined"
     ) {
-      // Get default values from form for initial map center
+      // Initialize Geocoder
+      geocoder.current = new google.maps.Geocoder();
+
+      // Get default latitude and longitude from form state for initial map center
       const defaultLat = form.getValues("location.latitude");
       const defaultLng = form.getValues("location.longitude");
 
-      // Initialize map centered on the default location (Addis Ababa coordinates)
+      // Initialize Google Map
       mapInstance.current = new google.maps.Map(mapRef.current, {
         center: { lat: defaultLat, lng: defaultLng },
         zoom: 13,
       });
 
-      // Initialize marker at the default location
+      // Initialize marker at the default location, make it draggable
       markerInstance.current = new google.maps.Marker({
         position: { lat: defaultLat, lng: defaultLng },
         map: mapInstance.current,
         draggable: true, // Allow dragging the marker
       });
 
-      // Add a click listener to the map to place/move the marker
-      mapInstance.current.addListener("click", (e: any) => {
-        const lat = e.latLng.lat();
-        const lng = e.latLng.lng();
+      // Function to reverse geocode and update address field
+      const reverseGeocodeAndUpdateForm = (
+        latLng: google.maps.LatLngLiteral,
+      ) => {
+        if (!geocoder.current) return;
 
-        // Update form values for latitude and longitude fields
-        form.setValue("location.latitude", parseFloat(lat.toFixed(6)), {
-          shouldValidate: true,
-        });
-        form.setValue("location.longitude", parseFloat(lng.toFixed(6)), {
-          shouldValidate: true,
-        });
+        geocoder.current.geocode(
+          { location: latLng },
+          (
+            results: google.maps.GeocoderResult[],
+            status: google.maps.GeocoderStatus,
+          ) => {
+            if (status === "OK" && results[0]) {
+              form.setValue("location.address", results[0].formatted_address, {
+                shouldValidate: true,
+              });
+              // Optionally, try to extract postal code if available
+              const postalCodeComponent = results[0].address_components.find(
+                (component) => component.types.includes("postal_code"),
+              );
+              if (postalCodeComponent) {
+                form.setValue(
+                  "location.postal_code",
+                  postalCodeComponent.long_name,
+                  { shouldValidate: true },
+                );
+              } else {
+                form.setValue("location.postal_code", "", {
+                  shouldValidate: true,
+                });
+              }
+            } else {
+              console.error("Geocoder failed due to: " + status);
+              form.setValue(
+                "location.address",
+                "Address not found for this location.",
+                { shouldValidate: true },
+              );
+              form.setValue("location.postal_code", "", {
+                shouldValidate: true,
+              });
+            }
+          },
+        );
+      };
 
-        // Set marker position
-        markerInstance.current.setPosition(e.latLng);
-      });
+      // Add a click listener to the map to update marker position and form fields
+      mapInstance.current.addListener(
+        "click",
+        (e: google.maps.MapMouseEvent) => {
+          const lat = e.latLng.lat();
+          const lng = e.latLng.lng();
+          const latLngLiteral = { lat, lng };
 
-      // Add a listener for marker drag end
-      markerInstance.current.addListener("dragend", (e: any) => {
-        const lat = e.latLng.lat();
-        const lng = e.latLng.lng();
+          // Update form values for latitude and longitude fields
+          form.setValue("location.latitude", parseFloat(lat.toFixed(6)), {
+            shouldValidate: true,
+          });
+          form.setValue("location.longitude", parseFloat(lng.toFixed(6)), {
+            shouldValidate: true,
+          });
 
-        form.setValue("location.latitude", parseFloat(lat.toFixed(6)), {
-          shouldValidate: true,
-        });
-        form.setValue("location.longitude", parseFloat(lng.toFixed(6)), {
-          shouldValidate: true,
-        });
-      });
+          // Set marker position
+          if (markerInstance.current) {
+            markerInstance.current.setPosition(e.latLng);
+          }
+
+          // Reverse geocode and update address
+          reverseGeocodeAndUpdateForm(latLngLiteral);
+        },
+      );
+
+      // Add a listener for marker drag end to update form fields
+      markerInstance.current.addListener(
+        "dragend",
+        (e: google.maps.MapMouseEvent) => {
+          const lat = e.latLng.lat();
+          const lng = e.latLng.lng();
+          const latLngLiteral = { lat, lng };
+
+          form.setValue("location.latitude", parseFloat(lat.toFixed(6)), {
+            shouldValidate: true,
+          });
+          form.setValue("location.longitude", parseFloat(lng.toFixed(6)), {
+            shouldValidate: true,
+          });
+
+          // Reverse geocode and update address
+          reverseGeocodeAndUpdateForm(latLngLiteral);
+        },
+      );
+
+      // Initial reverse geocode for default location
+      if (defaultLat !== 0 || defaultLng !== 0) {
+        reverseGeocodeAndUpdateForm({ lat: defaultLat, lng: defaultLng });
+      }
     }
   }, [isGoogleMapsLoaded, form]); // This effect depends on isGoogleMapsLoaded and the form instance
+
+  // Handler for address search
+  const handleAddressSearch = useCallback(() => {
+    if (!geocoder.current || !mapInstance.current || !searchAddress) return;
+
+    geocoder.current.geocode(
+      { address: searchAddress },
+      (
+        results: google.maps.GeocoderResult[],
+        status: google.maps.GeocoderStatus,
+      ) => {
+        if (status === "OK" && results[0]) {
+          const location = results[0].geometry.location;
+          const lat = location.lat();
+          const lng = location.lng();
+
+          // Update form fields
+          form.setValue("location.latitude", parseFloat(lat.toFixed(6)), {
+            shouldValidate: true,
+          });
+          form.setValue("location.longitude", parseFloat(lng.toFixed(6)), {
+            shouldValidate: true,
+          });
+          form.setValue("location.address", results[0].formatted_address, {
+            shouldValidate: true,
+          });
+
+          // Optionally, try to extract postal code if available
+          const postalCodeComponent = results[0].address_components.find(
+            (component) => component.types.includes("postal_code"),
+          );
+          if (postalCodeComponent) {
+            form.setValue(
+              "location.postal_code",
+              postalCodeComponent.long_name,
+              { shouldValidate: true },
+            );
+          } else {
+            form.setValue("location.postal_code", "", { shouldValidate: true });
+          }
+
+          // Center map and update marker
+          mapInstance.current.setCenter(location);
+          if (markerInstance.current) {
+            markerInstance.current.setPosition(location);
+          } else {
+            markerInstance.current = new google.maps.Marker({
+              position: location,
+              map: mapInstance.current,
+              draggable: true,
+            });
+            markerInstance.current.addListener(
+              "dragend",
+              (e: google.maps.MapMouseEvent) => {
+                const dragLat = e.latLng.lat();
+                const dragLng = e.latLng.lng();
+                form.setValue(
+                  "location.latitude",
+                  parseFloat(dragLat.toFixed(6)),
+                  { shouldValidate: true },
+                );
+                form.setValue(
+                  "location.longitude",
+                  parseFloat(dragLng.toFixed(6)),
+                  { shouldValidate: true },
+                );
+                // Reverse geocode for dragged marker
+                reverseGeocodeAndUpdateForm({ lat: dragLat, lng: dragLng });
+              },
+            );
+          }
+        } else {
+          alert("Address not found or Geocoder failed: " + status); // Use a custom modal in production
+          console.error("Geocoder failed due to: " + status);
+        }
+      },
+    );
+  }, [searchAddress, form]); // Dependency on searchAddress to trigger search on change/submit
 
   // Handler for form submission
   const onSubmit = (data: CreateOrderDtoType) => {
@@ -210,6 +369,19 @@ const EasyDropCheckout = () => {
       "Order data logged to console. In a real app, this would be sent to the backend!",
     );
   };
+
+  // Render a loading message if Google Maps is not yet loaded
+  if (!isGoogleMapsLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-purple-200">
+        <div className="max-w-6xl w-full bg-white rounded-xl shadow-2xl p-8 sm:p-10 lg:p-12">
+          <div className="flex justify-center items-center h-[400px] w-full bg-gray-200 rounded-lg shadow-md mb-6 text-gray-500">
+            Loading map...
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-purple-200">
@@ -486,6 +658,26 @@ const EasyDropCheckout = () => {
               <h2 className="text-2xl font-bold text-gray-800 mb-6">
                 3. Where should we deliver?
               </h2>
+              {/* Address Search Input */}
+              <div className="flex gap-2 mb-4">
+                <Input
+                  type="text"
+                  placeholder="Search for an address..."
+                  value={searchAddress}
+                  onChange={(e) => setSearchAddress(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault(); // Prevent form submission
+                      handleAddressSearch();
+                    }
+                  }}
+                  className="flex-grow"
+                />
+                <Button type="button" onClick={handleAddressSearch}>
+                  Search
+                </Button>
+              </div>
+
               {/* Conditional rendering for map while Google Maps loads */}
               {!isGoogleMapsLoaded && (
                 <div className="flex justify-center items-center h-[400px] w-full bg-gray-200 rounded-lg shadow-md mb-6 text-gray-500">
@@ -498,7 +690,7 @@ const EasyDropCheckout = () => {
                 ref={mapRef}
                 className={`h-[400px] w-full rounded-lg shadow-md mb-6 ${isGoogleMapsLoaded ? "" : "hidden"}`}
               ></div>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm text-gray-500 mt-4 mb-4">
                 Click on the map to select your exact delivery point, or drag
                 the marker. The latitude and longitude will be auto-filled. You
                 can then refine the address below.
@@ -515,6 +707,7 @@ const EasyDropCheckout = () => {
                         <Input
                           placeholder="e.g., 123 Main St, Anytown, State, Country"
                           {...field}
+                          // This input is primarily updated by map/search, but user can refine
                         />
                       </FormControl>
                       <FormMessage />
