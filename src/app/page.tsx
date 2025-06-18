@@ -232,7 +232,7 @@ const EasyDropCheckout = () => {
       return;
     }
 
-    router.push(`${params?.callback_url}/success`);
+    router.push(`${params?.callback_url}?delivery=success`);
   }
 
   if (orderError) {
@@ -240,7 +240,7 @@ const EasyDropCheckout = () => {
       return;
     }
 
-    router.push(`${params?.callback_url}/error`);
+    router.push(`${params?.callback_url}?delivery=success`);
   }
 
   if (loadError) {
