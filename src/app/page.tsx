@@ -260,9 +260,7 @@ const EasyDropCheckout = () => {
   if (!isLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-purple-200">
-        <div className="max-w-6xl w-full bg-white rounded-xl shadow-2xl p-8 sm:p-10 lg:p-12">
-          <SkCubeGrid />
-        </div>
+        <SkCubeGrid />
       </div>
     );
   }
