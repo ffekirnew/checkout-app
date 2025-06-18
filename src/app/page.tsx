@@ -30,6 +30,7 @@ import { parseCheckoutUrl } from "@/lib/utils";
 import useCreateOrder from "@/lib/hooks/order/use-create-order";
 import { ParcelSize } from "@/lib/use-cases/dtos/create-parcel-dto";
 import { useRouter } from "next/navigation";
+import SkCubeGrid from "@/components/spinkit/SkCubeGrid";
 
 const googleMapsApiKey = process.env.NEXT_PUBLIC_MAPS_API_KEY;
 const libraries: Libraries = ["places"];
@@ -106,6 +107,7 @@ const EasyDropCheckout = () => {
             form.setValue("location.address", results[0].formatted_address, {
               shouldValidate: true,
             });
+            setSearchAddress(results[0].formatted_address);
           } else {
             console.error("Geocoder failed due to: " + status);
             form.setValue(
@@ -259,9 +261,7 @@ const EasyDropCheckout = () => {
     return (
       <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-purple-200">
         <div className="max-w-6xl w-full bg-white rounded-xl shadow-2xl p-8 sm:p-10 lg:p-12">
-          <div className="flex justify-center items-center h-[400px] w-full bg-gray-200 rounded-lg shadow-md mb-6 text-gray-500">
-            Loading...
-          </div>
+          <SkCubeGrid />
         </div>
       </div>
     );
