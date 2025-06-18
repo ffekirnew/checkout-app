@@ -1,8 +1,6 @@
-import { ParcelSize } from "@/lib/use-cases/dtos/create-parcel-dto";
-
 export interface UrlQueryParams {
   api_key: string;
-  size: ParcelSize;
+  size: string;
   length: number;
   width: number;
   height: number;

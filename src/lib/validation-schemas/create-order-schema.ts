@@ -23,7 +23,7 @@ export const createOrderSchema = z.object({
   latest_time_of_delivery: z.string().min(1, "Delivery time is required."), // datetime-local outputs string
 
   parcel: z.object({
-    size: z.enum(["small", "medium", "large"], {
+    size: z.string({
       message: "Parcel size is required.",
     }),
     length: z
