@@ -7,6 +7,6 @@ export interface CreateOrderDto {
   phone_number: string;
   email: string;
   location: CreateLocationDto;
-  latest_time_of_delivery: Date;
+  latest_time_of_delivery: string;
   parcel: CreateParcelDto;
 }

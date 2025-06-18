@@ -5,7 +5,7 @@ export enum ParcelSize {
 }
 
 export interface CreateParcelDto {
-  size: ParcelSize;
+  size: string;
   length: number;
   width: number;
   height: number;

@@ -1,5 +1,10 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Checkout url
+```sh
+https://localhost:3000?api_key=4433f22f_WdHOeTkwwjbqloonsqooJxz2J0xr2NhG4Z2unIBghBQHqE2bI-mmFpFD2MIPyO3C&size=small&length=10.0&width=30.0&height=10.0&weight=1.0&fragile=1&callback_url=https%3A%2F%2Fsome-callback.url
+```
+
 ## Getting Started
 
 First, run the development server:
